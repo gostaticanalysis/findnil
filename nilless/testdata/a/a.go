@@ -17,6 +17,13 @@ func main() {
 	println(err.Error())
 	var logger *zap.Logger //@ isNil
 	println(logger.Info)
+	var iface interface{ F(int, ...string) int } //@ isNil
+	println(iface.F(10, "a"))
+	var st *struct { //@ isNil
+		N int `json:"n"`
+		S string
+	}
+	println(st.N)
 }
 
 func f(t *T) {

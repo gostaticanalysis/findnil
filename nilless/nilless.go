@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.uber.org/multierr"
@@ -395,7 +396,7 @@ func (r *replacer) outputDecls(dir string) error {
 	}
 
 	// for debug
-	//fmt.Println(string(src))
+	// fmt.Println(string(src))
 
 	if err := os.WriteFile(path, src, 0o666); err != nil {
 		return err
@@ -512,8 +513,64 @@ func (r *replacer) typeString(typ types.Type) string {
 		return typ.Obj().Name()
 	case *types.Pointer:
 		return "*" + r.typeString(typ.Elem())
-	default:
-		fmt.Println(typ.String())
-		return typ.String()
+	case *types.Slice:
+		return "[]" + r.typeString(typ.Elem())
+	case *types.Array:
+		return fmt.Sprintf("[%d]%s", typ.Len(), r.typeString(typ.Elem()))
+	case *types.Map:
+		return fmt.Sprintf("map[%s]%s", r.typeString(typ.Key()), r.typeString(typ.Elem()))
+	case *types.Chan:
+		switch typ.Dir() {
+		case types.SendRecv:
+			return fmt.Sprintf("chan %s", r.typeString(typ.Elem()))
+		case types.SendOnly:
+			return fmt.Sprintf("chan<- %s", r.typeString(typ.Elem()))
+		case types.RecvOnly:
+			return fmt.Sprintf("<-chan %s", r.typeString(typ.Elem()))
+		}
+	case *types.Signature:
+		return "func" + r.signatureString(typ)
+	case *types.Interface:
+		methods := make([]string, 0, typ.NumMethods())
+		for i := 0; i < typ.NumMethods(); i++ {
+			m := typ.Method(i)
+			sig, _ := m.Type().(*types.Signature)
+			if sig == nil {
+				continue
+			}
+			methods = append(methods, m.Name()+r.signatureString(sig))
+		}
+		return fmt.Sprintf("interface{ %s }", strings.Join(methods, ";"))
+	case *types.Struct:
+		fields := make([]string, typ.NumFields())
+		for i := range fields {
+			f := typ.Field(i)
+			fields[i] = fmt.Sprintf("%s %s", f.Name(), r.typeString(f.Type()))
+			if tag := typ.Tag(i); tag != "" {
+				fields[i] += " " + strconv.Quote(tag)
+			}
+		}
+		return fmt.Sprintf("struct{ %s }", strings.Join(fields, ";"))
 	}
+
+	return typ.String()
+}
+
+func (r *replacer) signatureString(sig *types.Signature) string {
+	args := make([]string, sig.Params().Len())
+	results := make([]string, sig.Results().Len())
+
+	for i := range args {
+		args[i] = r.typeString(sig.Params().At(i).Type())
+	}
+
+	if sig.Variadic() {
+		args[len(args)-1] = "..." + args[len(args)-1]
+	}
+
+	for i := range results {
+		results[i] = r.typeString(sig.Results().At(i).Type())
+	}
+
+	return fmt.Sprintf("(%s) (%s)", strings.Join(args, ","), strings.Join(results, ","))
 }
