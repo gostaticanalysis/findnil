@@ -357,7 +357,11 @@ func (r *replacer) outputDecls(dir string) error {
 
 	for _, file := range r.pkgs[r.idx].Syntax {
 		for _, impt := range file.Imports {
-			fmt.Fprintln(&buf, "import", impt.Name.Name, impt.Path.Value)
+			fmt.Fprint(&buf, "import ")
+			if impt.Name != nil {
+				fmt.Fprint(&buf, impt.Name.Name+" ")
+			}
+			fmt.Fprintln(&buf, impt.Path.Value)
 		}
 	}
 
