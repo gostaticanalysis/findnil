@@ -1,5 +1,7 @@
 package main
 
+import "go.uber.org/zap"
+
 type T struct {
 	N int
 	m *int
@@ -13,6 +15,8 @@ func main() {
 	println(gt.N)
 	var err error //@ isNil
 	println(err.Error())
+	var logger *zap.Logger //@ isNil
+	println(logger.Info)
 }
 
 func f(t *T) {

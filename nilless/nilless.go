@@ -394,6 +394,9 @@ func (r *replacer) outputDecls(dir string) error {
 		return fmt.Errorf("goimports %s: %w", path, err)
 	}
 
+	// for debug
+	//fmt.Println(string(src))
+
 	if err := os.WriteFile(path, src, 0o666); err != nil {
 		return err
 	}
@@ -504,7 +507,13 @@ func (r *replacer) zeroValue(typ types.Type) (ast.Expr, error) {
 }
 
 func (r *replacer) typeString(typ types.Type) string {
-	var buf bytes.Buffer
-	types.WriteType(&buf, typ, types.RelativeTo(r.pkgs[r.idx].Types))
-	return buf.String()
+	switch typ := typ.(type) {
+	case *types.Named:
+		return typ.Obj().Name()
+	case *types.Pointer:
+		return "*" + r.typeString(typ.Elem())
+	default:
+		fmt.Println(typ.String())
+		return typ.String()
+	}
 }
