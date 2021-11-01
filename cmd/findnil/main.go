@@ -7,5 +7,5 @@ import (
 )
 
 func main() {
-	os.Exit(findnil.Main(os.Args[1:]))
+	os.Exit(findnil.Main(os.Args[1:]...))
 }
