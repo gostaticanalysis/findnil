@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 
 	"github.com/gostaticanalysis/findnil/nilless"
 	"golang.org/x/tools/go/ast/inspector"
@@ -75,11 +76,12 @@ func (cmd *Cmd) analyze(prog *Program) error {
 		Mains: []*ssa.Package{prog.Main},
 	}
 
+	var nodes []ast.Node
 	node2pkg := make(map[ast.Node]*types.Package)
 	node2value := make(map[ast.Node]ssa.Value)
 	inspect := inspector.New(prog.Files)
-	nodes := []ast.Node{(*ast.SelectorExpr)(nil)}
-	inspect.WithStack(nodes, func(n ast.Node, push bool, stack []ast.Node) (proceed bool) {
+	filter := []ast.Node{(*ast.SelectorExpr)(nil)}
+	inspect.WithStack(filter, func(n ast.Node, push bool, stack []ast.Node) (proceed bool) {
 		if !push {
 			return false
 		}
@@ -89,8 +91,8 @@ func (cmd *Cmd) analyze(prog *Program) error {
 			return true
 		}
 
-		typ, _ := prog.TypesInfo.TypeOf(sel.X).(*types.Pointer)
-		if typ == nil {
+		typ := prog.TypesInfo.TypeOf(sel.X)
+		if !pointer.CanPoint(typ) {
 			return false
 		}
 
@@ -101,9 +103,11 @@ func (cmd *Cmd) analyze(prog *Program) error {
 
 		v, _ := f.ValueForExpr(sel.X)
 		if v == nil {
+			fmt.Println(sel.X)
 			return false
 		}
 
+		nodes = append(nodes, sel)
 		node2pkg[sel] = f.Package().Pkg
 		node2value[sel] = v
 		config.AddQuery(v)
@@ -131,7 +135,11 @@ func (cmd *Cmd) analyze(prog *Program) error {
 		}
 	}
 
-	for n, v := range node2value {
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Pos() < nodes[i].Pos()
+	})
+	for _, n := range nodes {
+		v := node2value[n]
 		if !nils[v] {
 			continue
 		}

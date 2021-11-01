@@ -15,6 +15,8 @@ func main() {
 	println(t.N)
 	t2 := h(2)
 	println(t2.N)
+	var err error
+	println(err.Error())
 }
 
 func f(t *T) {

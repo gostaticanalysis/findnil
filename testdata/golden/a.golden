@@ -1,4 +1,5 @@
 a/a.go:13:10 gt.N may be nil
 a/a.go:15:10 t.N may be nil
 a/a.go:17:10 t2.N may be nil
-a/a.go:21:10 t.N may be nil
+a/a.go:19:10 err.Error may be nil
+a/a.go:23:10 t.N may be nil

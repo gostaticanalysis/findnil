@@ -39,14 +39,14 @@ func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
 		return nil, err
 	}
 
-	dir, err := os.MkdirTemp("", "nilreplace-*")
+	dir, err := os.MkdirTemp("", "nilless-*")
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		rerr = multierr.Append(rerr, os.RemoveAll(dir))
 		if rerr != nil {
-			rerr = fmt.Errorf("nilreplace.Load: %w", rerr)
+			rerr = fmt.Errorf("nilless.Load: %w", rerr)
 		}
 	}()
 
@@ -151,11 +151,11 @@ func (r *replacer) do() error {
 		newFiles[i] = f
 	}
 	if err != nil {
-		return fmt.Errorf("nilreplace: %w", err)
+		return fmt.Errorf("nilless: %w", err)
 	}
 
 	if err := r.output(newFiles); err != nil {
-		return fmt.Errorf("nilreplace: %w", err)
+		return fmt.Errorf("nilless: %w", err)
 	}
 
 	return nil
@@ -248,23 +248,15 @@ func (r *replacer) isNil(expr ast.Expr) bool {
 }
 
 func (r *replacer) nilValue(typ types.Type) (ast.Expr, error) {
-	switch typ := typ.(type) {
-	case *types.Pointer:
-		return r.nilPointer(typ)
-	}
-	return nil, fmt.Errorf("unexpected type: %v", typ)
-}
-
-func (r *replacer) nilPointer(typ *types.Pointer) (ast.Expr, error) {
 
 	decl, _ := r.nilDecls.At(typ).(*nilDecl)
 	if decl != nil {
 		return ast.NewIdent(decl.name), nil
 	}
 
-	typExpr, err := parser.ParseExpr(r.typeString(typ.Elem()))
+	typExpr, err := parser.ParseExpr(r.typeString(typ))
 	if err != nil {
-		return nil, fmt.Errorf("parse type string(%s): %w", typ.Elem().String(), err)
+		return nil, fmt.Errorf("parse type string(%s): %w", typ.String(), err)
 	}
 
 	name := uniqName(fmt.Sprintf("__nil_%p_%d_*", r.pkgs[r.idx], r.hasher.Hash(typ)), func(name string) bool {
@@ -276,10 +268,12 @@ func (r *replacer) nilPointer(typ *types.Pointer) (ast.Expr, error) {
 			Tok: token.VAR,
 			Specs: []ast.Spec{&ast.ValueSpec{
 				Names: []*ast.Ident{ast.NewIdent(name)},
-				Values: []ast.Expr{&ast.CallExpr{
-					Fun:  ast.NewIdent("new"),
-					Args: []ast.Expr{typExpr},
-				}},
+				Values: []ast.Expr{&ast.UnaryExpr{
+					Op: token.MUL,
+					X: &ast.CallExpr{
+						Fun:  ast.NewIdent("new"),
+						Args: []ast.Expr{typExpr},
+					}}},
 			}},
 		},
 		name: name,
@@ -385,7 +379,7 @@ func (r *replacer) outputDecls(dir string) error {
 		}
 	})
 
-	path := filepath.Join(dir, uniqName("nilreplace_decls_*.go", func(name string) bool {
+	path := filepath.Join(dir, uniqName("nilless_decls_*.go", func(name string) bool {
 		_, err := os.Stat(filepath.Join(dir, name))
 		return os.IsNotExist(err)
 	}))
@@ -395,7 +389,7 @@ func (r *replacer) outputDecls(dir string) error {
 		fmt.Println(&buf)
 		return fmt.Errorf("goimports %s: %w", path, err)
 	}
-	
+
 	if err := os.WriteFile(path, src, 0o666); err != nil {
 		return err
 	}

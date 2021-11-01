@@ -11,6 +11,8 @@ func main() {
 	f(new(T))
 	f(g())
 	println(gt.N)
+	var err error //@ isNil
+	println(err.Error())
 }
 
 func f(t *T) {
