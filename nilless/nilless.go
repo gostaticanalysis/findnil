@@ -168,13 +168,13 @@ func (r *replacer) returnStmt(c *astutil.Cursor, ret *ast.ReturnStmt) error {
 		Results: make([]ast.Expr, len(ret.Results)),
 	}
 
+	rets := r.funcByPos(ret.Pos()).Results()
 	for i, val := range ret.Results {
 		if !r.isNil(val) {
 			newRet.Results[i] = val
 			continue
 		}
-		sig := r.funcByPos(val.Pos())
-		typ := sig.Results().At(i).Type()
+		typ := rets.At(i).Type()
 		newVal, err := r.nilValue(typ)
 		if err != nil {
 			return err
@@ -187,14 +187,14 @@ func (r *replacer) returnStmt(c *astutil.Cursor, ret *ast.ReturnStmt) error {
 	return nil
 }
 
-func (r *replacer) funcByPos(pos token.Pos) *types.Signature {
+func (r *replacer) funcByPos(pos token.Pos) (sig *types.Signature) {
 	file := r.fileByPos(pos)
 	if file == nil {
 		return nil
 	}
 	path, _ := astutil.PathEnclosingInterval(file, pos, pos)
-	for i := range path {
-		switch n := path[len(path)-1-i].(type) {
+	for _, n := range path {
+		switch n := n.(type) {
 		case *ast.FuncDecl:
 			sig, _ := r.pkgs[r.idx].TypesInfo.TypeOf(n.Name).(*types.Signature)
 			return sig
