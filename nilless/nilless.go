@@ -314,6 +314,11 @@ func (r *replacer) declsFile() *ast.File {
 }
 
 func (r *replacer) output(files []*ast.File) error {
+
+	if len(files) == 0 {
+		return nil
+	}
+
 	// copy go.mod
 	if err := r.copyGoMod(r.dir); err != nil {
 		return err
