@@ -556,6 +556,10 @@ func (r *replacer) typeString(typ types.Type) string {
 			}
 		}
 		return fmt.Sprintf("struct{ %s }", strings.Join(fields, ";"))
+	case *types.Basic:
+		if typ.Info()&types.IsUntyped != 0 {
+			return r.typeString(types.Default(typ))
+		}
 	}
 
 	return typ.String()
