@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"go.uber.org/multierr"
+	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/pointer"
@@ -85,8 +86,24 @@ func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
 		}
 	}
 
+	mod, err := os.ReadFile("go.mod")
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read go.mod: %w", err)
+	}
+	modpath := modfile.ModulePath(mod)
+
 	newCfg := *(r.cfg)
-	newCfg.Dir = dir
+	if modpath == "" {
+		newCfg.Dir = dir
+	} else {
+		newCfg.Dir = filepath.Join(dir, filepath.FromSlash(modpath))
+		if err := os.MkdirAll(newCfg.Dir, 0700); err != nil {
+			return nil, fmt.Errorf("mkdir %s: %w", newCfg.Dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(newCfg.Dir, "go.mod"), mod, 0o666); err != nil {
+			return nil, fmt.Errorf("copy go.mod: %w", err)
+		}
+	}
 	newCfg.Fset = token.NewFileSet()
 	newPkgs, err := packages.Load(&newCfg, patterns...)
 	if err != nil {
@@ -319,17 +336,22 @@ func (r *replacer) output(files []*ast.File) error {
 		return nil
 	}
 
-	// copy go.mod
-	if err := r.copyGoMod(r.dir); err != nil {
+	dir := filepath.Join(r.dir, filepath.FromSlash(r.pkgs[r.idx].Types.Path()))
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 
-	if err := r.outputDecls(r.dir); err != nil {
+	// copy go.mod
+	if err := r.copyGoMod(dir); err != nil {
+		return err
+	}
+
+	if err := r.outputDecls(dir); err != nil {
 		return err
 	}
 
 	for _, file := range files {
-		if err := r.outputFile(r.dir, file); err != nil {
+		if err := r.outputFile(dir, file); err != nil {
 			return err
 		}
 	}
@@ -396,7 +418,6 @@ func (r *replacer) outputDecls(dir string) error {
 
 	src, err := imports.Process("", buf.Bytes(), nil)
 	if err != nil {
-		fmt.Println(&buf)
 		return fmt.Errorf("goimports %s: %w", path, err)
 	}
 

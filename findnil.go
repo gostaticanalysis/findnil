@@ -73,47 +73,50 @@ func (cmd *Cmd) run(args []string) error {
 func (cmd *Cmd) analyze(prog *Program) error {
 
 	config := &pointer.Config{
-		Mains: []*ssa.Package{prog.Main},
+		Mains: prog.Mains,
 	}
 
 	var nodes []ast.Node
 	node2pkg := make(map[ast.Node]*types.Package)
 	node2value := make(map[ast.Node]ssa.Value)
-	inspect := inspector.New(prog.Files)
-	filter := []ast.Node{(*ast.SelectorExpr)(nil)}
-	inspect.WithStack(filter, func(n ast.Node, push bool, stack []ast.Node) (proceed bool) {
-		if !push {
-			return false
-		}
 
-		sel, _ := n.(*ast.SelectorExpr)
-		if sel == nil {
+	for _, pkg := range prog.Packages {
+		inspect := inspector.New(prog.Files[pkg])
+		filter := []ast.Node{(*ast.SelectorExpr)(nil)}
+		inspect.WithStack(filter, func(n ast.Node, push bool, stack []ast.Node) (proceed bool) {
+			if !push {
+				return false
+			}
+
+			sel, _ := n.(*ast.SelectorExpr)
+			if sel == nil {
+				return true
+			}
+
+			typ := prog.TypesInfo[pkg].TypeOf(sel.X)
+			if !pointer.CanPoint(typ) {
+				return false
+			}
+
+			f := ssa.EnclosingFunction(pkg, stackToPath(stack))
+			if f == nil {
+				return false
+			}
+
+			v, _ := f.ValueForExpr(sel.X)
+			if v == nil {
+				fmt.Println(sel.X)
+				return false
+			}
+
+			nodes = append(nodes, sel)
+			node2pkg[sel] = f.Package().Pkg
+			node2value[sel] = v
+			config.AddQuery(v)
+
 			return true
-		}
-
-		typ := prog.TypesInfo.TypeOf(sel.X)
-		if !pointer.CanPoint(typ) {
-			return false
-		}
-
-		f := ssa.EnclosingFunction(prog.Main, stackToPath(stack))
-		if f == nil {
-			return false
-		}
-
-		v, _ := f.ValueForExpr(sel.X)
-		if v == nil {
-			fmt.Println(sel.X)
-			return false
-		}
-
-		nodes = append(nodes, sel)
-		node2pkg[sel] = f.Package().Pkg
-		node2value[sel] = v
-		config.AddQuery(v)
-
-		return true
-	})
+		})
+	}
 
 	result, err := pointer.Analyze(config)
 	if err != nil {
@@ -195,7 +198,7 @@ func isNilGlobal(prog *Program, v ssa.Value) bool {
 	case *ssa.UnOp:
 		return isNilGlobal(prog, v.X)
 	case *ssa.Global:
-		for _, init := range prog.TypesInfo.InitOrder {
+		for _, init := range prog.TypesInfo[v.Parent().Pkg].InitOrder {
 			if len(init.Lhs) != 1 || v.Object() != init.Lhs[0] {
 				continue
 			}
