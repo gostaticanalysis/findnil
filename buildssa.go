@@ -43,7 +43,7 @@ func buildSSA(result *nilless.Result) (*Program, error) {
 			if !created[p] {
 				created[p] = true
 				ssapkg := prog.SSA.CreatePackage(p.Types, p.Syntax, p.TypesInfo, true)
-				if p.Types.Path() == "main" {
+				if p.Types.Name() == "main" {
 					prog.Mains = append(prog.Mains, ssapkg)
 				}
 				prog.Files[ssapkg] = p.Syntax
@@ -57,7 +57,7 @@ func buildSSA(result *nilless.Result) (*Program, error) {
 	for _, pkg := range result.Pkgs {
 		created[pkg] = true
 		ssapkg := prog.SSA.CreatePackage(pkg.Types, pkg.Syntax, pkg.TypesInfo, true)
-		if pkg.Types.Path() == "main" {
+		if pkg.Types.Name() == "main" {
 			prog.Mains = append(prog.Mains, ssapkg)
 		}
 		prog.Files[ssapkg] = pkg.Syntax

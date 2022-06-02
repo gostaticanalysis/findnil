@@ -32,7 +32,7 @@ type Result struct {
 }
 
 func (r *Result) Base(path string) string {
-	return strings.TrimPrefix(path, r.tmpdir)
+	return strings.TrimPrefix(path, filepath.Clean(r.tmpdir) + "/")
 }
 
 func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
@@ -86,7 +86,11 @@ func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
 		}
 	}
 
-	mod, err := os.ReadFile("go.mod")
+	modfilepath := "go.mod"
+	if r.cfg.Dir != "" {
+		modfilepath = filepath.Join(r.cfg.Dir, modfilepath)
+	}
+	mod, err := os.ReadFile(modfilepath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read go.mod: %w", err)
 	}

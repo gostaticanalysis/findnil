@@ -9,7 +9,6 @@ import (
 	"go/types"
 	"io"
 	"os"
-	"path"
 	"sort"
 
 	"github.com/gostaticanalysis/findnil/nilless"
@@ -105,7 +104,6 @@ func (cmd *Cmd) analyze(prog *Program) error {
 
 			v, _ := f.ValueForExpr(sel.X)
 			if v == nil {
-				fmt.Println(sel.X)
 				return false
 			}
 
@@ -198,7 +196,7 @@ func isNilGlobal(prog *Program, v ssa.Value) bool {
 	case *ssa.UnOp:
 		return isNilGlobal(prog, v.X)
 	case *ssa.Global:
-		for _, init := range prog.TypesInfo[v.Parent().Pkg].InitOrder {
+		for _, init := range prog.TypesInfo[v.Pkg].InitOrder {
 			if len(init.Lhs) != 1 || v.Object() != init.Lhs[0] {
 				continue
 			}
@@ -215,6 +213,6 @@ func isNilGlobal(prog *Program, v ssa.Value) bool {
 
 func fileline(prog *Program, pkg string, p token.Pos) string {
 	pos := prog.Fset.Position(p)
-	fname := path.Join(pkg, prog.Nilless.Base(pos.Filename))
+	fname := prog.Nilless.Base(pos.Filename)
 	return fmt.Sprintf("%s:%d:%d", fname, pos.Line, pos.Column)
 }
