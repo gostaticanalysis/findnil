@@ -15,4 +15,5 @@ require (
 	github.com/josharian/txtarfs v0.0.0-20210615234325-77aca6df5bca // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )

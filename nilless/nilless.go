@@ -10,6 +10,7 @@ import (
 	"go/types"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -32,7 +33,7 @@ type Result struct {
 }
 
 func (r *Result) Base(path string) string {
-	return strings.TrimPrefix(path, filepath.Clean(r.tmpdir) + "/")
+	return strings.TrimPrefix(path, filepath.Clean(r.tmpdir)+"/")
 }
 
 func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
@@ -45,6 +46,8 @@ func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
 	if err != nil {
 		return nil, err
 	}
+	// for debug
+	//fmt.Println("work in", dir)
 	defer func() {
 		rerr = multierr.Append(rerr, os.RemoveAll(dir))
 		if rerr != nil {
@@ -108,6 +111,11 @@ func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
 			return nil, fmt.Errorf("copy go.mod: %w", err)
 		}
 	}
+
+	if err := modtidy(newCfg.Dir); err != nil {
+		return nil, fmt.Errorf("packages.Load: go mod tidy: %w", err)
+	}
+
 	newCfg.Fset = token.NewFileSet()
 	newPkgs, err := packages.Load(&newCfg, patterns...)
 	if err != nil {
@@ -117,6 +125,14 @@ func Load(cfg *packages.Config, patterns ...string) (_ *Result, rerr error) {
 	r.result.Fset = newCfg.Fset
 
 	return r.result, nil
+}
+
+func modtidy(dir string) error {
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = dir
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd.Run()
 }
 
 type nilDecl struct {

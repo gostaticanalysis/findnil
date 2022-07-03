@@ -122,14 +122,15 @@ func (cmd *Cmd) analyze(prog *Program) error {
 	}
 
 	nils := make(map[ssa.Value]bool)
+	done := make(map[ssa.Value]bool)
 	for v, p := range result.Queries {
-		if isNil(prog, v) {
+		if isNil(prog, done, v) {
 			nils[v] = true
 		}
 
 		for _, l := range p.PointsTo().Labels() {
 			lv := l.Value()
-			if !(nils[v] && nils[lv]) || isNil(prog, lv) {
+			if !(nils[v] && nils[lv]) || isNil(prog, done, lv) {
 				nils[v] = true
 				nils[lv] = true
 			}
@@ -170,24 +171,37 @@ func refs(v ssa.Value) []ssa.Instruction {
 	return *refsptr
 }
 
-func isNil(prog *Program, v ssa.Value) bool {
+func isNil(prog *Program, done map[ssa.Value]bool, v ssa.Value) bool {
+	if done[v] {
+		return false
+	}
+	done[v] = true
+
 	if isNilGlobal(prog, v) {
 		return true
 	}
 
 	for _, ref := range refs(v) {
-		ref, _ := ref.(*ssa.DebugRef)
-		if ref == nil {
-			continue
-		}
+		switch ref := ref.(type) {
+		case *ssa.DebugRef:
+			id, _ := ref.Expr.(*ast.Ident)
+			if id == nil {
+				continue
+			}
 
-		id, _ := ref.Expr.(*ast.Ident)
-		if id == nil {
-			continue
+			if prog.Nilless.IsNil[id.Name] {
+				return true
+			}
+		case *ssa.Store:
+			return isNil(prog, done, ref.Val)
 		}
-
-		return prog.Nilless.IsNil[id.Name]
 	}
+
+	switch v := v.(type) {
+	case *ssa.UnOp:
+		return isNil(prog, done, v.X)
+	}
+
 	return false
 }
 

@@ -24,7 +24,7 @@ type Program struct {
 
 func buildSSA(result *nilless.Result) (*Program, error) {
 
-	mode := ssa.GlobalDebug //| ssa.NaiveForm | ssa.BareInits
+	mode := ssa.GlobalDebug | ssa.NaiveForm | ssa.BareInits
 	prog := &Program{
 		Nilless:   result,
 		SSA:       ssa.NewProgram(result.Fset, mode),
