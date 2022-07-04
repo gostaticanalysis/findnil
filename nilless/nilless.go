@@ -136,11 +136,13 @@ func modtidy(dir string) error {
 }
 
 type nilDecl struct {
+	froms   map[*packages.Package]bool
 	gendecl *ast.GenDecl
 	name    string
 }
 
 type zeroDecl struct {
+	froms    map[*packages.Package]bool
 	funcdecl *ast.FuncDecl
 	name     string
 }
@@ -289,6 +291,7 @@ func (r *replacer) nilValue(typ types.Type) (ast.Expr, error) {
 
 	decl, _ := r.nilDecls.At(typ).(*nilDecl)
 	if decl != nil {
+		decl.froms[r.pkgs[r.idx]] = true
 		return ast.NewIdent(decl.name), nil
 	}
 
@@ -302,6 +305,7 @@ func (r *replacer) nilValue(typ types.Type) (ast.Expr, error) {
 	})
 
 	decl = &nilDecl{
+		froms: map[*packages.Package]bool{r.pkgs[r.idx]: true},
 		gendecl: &ast.GenDecl{
 			Tok: token.VAR,
 			Specs: []ast.Spec{&ast.ValueSpec{
@@ -327,13 +331,13 @@ func (r *replacer) declsFile() *ast.File {
 	decls := make([]ast.Decl, 0, r.nilDecls.Len()+r.zeroDecls.Len())
 
 	r.nilDecls.Iterate(func(_ types.Type, val interface{}) {
-		if decl, _ := val.(*nilDecl); decl != nil {
+		if decl, _ := val.(*nilDecl); decl != nil && decl.froms[r.pkgs[r.idx]] {
 			decls = append(decls, decl.gendecl)
 		}
 	})
 
 	r.zeroDecls.Iterate(func(_ types.Type, val interface{}) {
-		if decl, _ := val.(*zeroDecl); decl != nil {
+		if decl, _ := val.(*zeroDecl); decl != nil && decl.froms[r.pkgs[r.idx]] {
 			decls = append(decls, decl.funcdecl)
 		}
 	})
@@ -385,6 +389,11 @@ func (r *replacer) copyGoMod(dir string) error {
 		return nil
 	}
 
+	// sub package
+	if r.pkgs[r.idx].Module.Path != r.pkgs[r.idx].Types.Path() {
+		return nil
+	}
+
 	gomod, err := os.ReadFile(r.pkgs[r.idx].Module.GoMod)
 	if err != nil {
 		return err
@@ -413,9 +422,11 @@ func (r *replacer) outputDecls(dir string) error {
 		}
 	}
 
+	var count int
 	var err error
 	r.nilDecls.Iterate(func(_ types.Type, val interface{}) {
-		if decl, _ := val.(*nilDecl); decl != nil {
+		if decl, _ := val.(*nilDecl); decl != nil && decl.froms[r.pkgs[r.idx]] {
+			count++
 			err = multierr.Append(err, format.Node(&buf, token.NewFileSet(), decl.gendecl))
 			fmt.Fprintln(&buf)
 		}
@@ -425,11 +436,17 @@ func (r *replacer) outputDecls(dir string) error {
 	}
 
 	r.zeroDecls.Iterate(func(_ types.Type, val interface{}) {
-		if decl, _ := val.(*zeroDecl); decl != nil {
+		if decl, _ := val.(*zeroDecl); decl != nil && decl.froms[r.pkgs[r.idx]] {
+			count++
 			err = multierr.Append(err, format.Node(&buf, token.NewFileSet(), decl.funcdecl))
 			fmt.Fprintln(&buf)
 		}
 	})
+
+	// no decls
+	if count == 0 {
+		return nil
+	}
 
 	path := filepath.Join(dir, uniqName("nilless_decls_*.go", func(name string) bool {
 		_, err := os.Stat(filepath.Join(dir, name))
@@ -512,6 +529,7 @@ func (r *replacer) decl(c *astutil.Cursor, spec *ast.ValueSpec) error {
 func (r *replacer) zeroValue(typ types.Type) (ast.Expr, error) {
 	decl, _ := r.zeroDecls.At(typ).(*zeroDecl)
 	if decl != nil {
+		decl.froms[r.pkgs[r.idx]] = true
 		return &ast.CallExpr{
 			Fun: ast.NewIdent(decl.name),
 		}, nil
@@ -527,6 +545,7 @@ func (r *replacer) zeroValue(typ types.Type) (ast.Expr, error) {
 	})
 
 	decl = &zeroDecl{
+		froms: map[*packages.Package]bool{r.pkgs[r.idx]: true},
 		funcdecl: &ast.FuncDecl{
 			Name: ast.NewIdent(name),
 			Type: &ast.FuncType{
@@ -556,7 +575,14 @@ func (r *replacer) zeroValue(typ types.Type) (ast.Expr, error) {
 func (r *replacer) typeString(typ types.Type) string {
 	switch typ := typ.(type) {
 	case *types.Named:
-		return typ.Obj().Name()
+		obj := typ.Obj()
+		switch {
+		case obj.Parent() == types.Universe ||
+			obj.Parent() == r.pkgs[r.idx].Types.Scope():
+			return obj.Name()
+		default:
+			return obj.Pkg().Name() + "." + obj.Name()
+		}
 	case *types.Pointer:
 		return "*" + r.typeString(typ.Elem())
 	case *types.Slice:
